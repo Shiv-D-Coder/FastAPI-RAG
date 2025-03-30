@@ -11,44 +11,50 @@ This project implements a Document Intelligence Retrieval-Augmented Generation (
 
 ## Requirements
 
-- Python 3.8 or higher
+- Python 3.11 or higher
 - Required Python packages (see below)
 
 ## Installation
 
 1. Clone the repository:
 
-git clone <repository-url>
-cd <repository-directory>
+```
+git clone https://github.com/Shiv-D-Coder/FastAPI-RAG
+cd FastAPI-RAG
 
-text
+```
 
 2. Create a virtual environment:
 
+```
 python -m venv myenv
-source myenv/bin/activate # On Windows use: myenv\Scripts\activate
+myenv\Scripts\activate
+```
 
-text
 
 3. Install the required packages:
 
+```
 pip install fastapi uvicorn sentence-transformers faiss-cpu python-dotenv requests PyPDF2 python-docx
+```
 
 text
 
 4. Create a `.env` file in the project root and add your Groq API key:
 
+```
 GROQ_API_KEY=your_groq_api_key_here
+```
 
-text
 
 ## Running the Application
 
 To run the FastAPI application, use the following command:
 
+```
 uvicorn main:app --reload
+```
 
-text
 
 The API will be accessible at `http://127.0.0.1:8000`.
 
@@ -60,12 +66,6 @@ The API will be accessible at `http://127.0.0.1:8000`.
 
 Returns a message indicating that the API is running.
 
-**Response**:
-{
-"message": "Document Intelligence RAG API is running!"
-}
-
-text
 
 ### 2. Status Endpoint
 
@@ -80,7 +80,7 @@ Returns the current status of the API, including the number of stored documents 
 "active_conversations": <number>
 }
 
-text
+
 
 ### 3. Embedding Endpoint
 
@@ -93,15 +93,6 @@ Embeds a document for semantic search.
 "document": "path/to/your/document.pdf"
 }
 
-text
-
-**Response**:
-{
-"message": "Document embedded successfully",
-"document_id": "<document_id>"
-}
-
-text
 
 ### 4. Query Endpoint
 
@@ -115,10 +106,3 @@ Queries the embedded documents for relevant information.
 "conversation_id": null // Optional
 }
 
-text
-
-**Response**:
-{
-"response": "<generated_response>",
-"conversation_id": "<conversation_id>"
-}
