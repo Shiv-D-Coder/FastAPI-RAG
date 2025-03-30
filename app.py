@@ -9,8 +9,8 @@ from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 import requests
 import json
+import PyPDF2
 
-# Load environment variables
 load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
@@ -19,7 +19,6 @@ if not GROQ_API_KEY:
 
 app = FastAPI()
 
-# Simple in-memory storage
 document_store = {}
 embedding_store = {}
 chunks_store = {}
@@ -38,8 +37,7 @@ def process_document(file_path: str) -> str:
     text = ""
     if file_path.endswith('.pdf'):
         try:
-            # Try PyPDF2 which is more commonly installed
-            import PyPDF2
+            
             with open(file_path, 'rb') as file:
                 reader = PyPDF2.PdfReader(file)
                 text = ""
@@ -100,44 +98,35 @@ async def embed_document(req: EmbedRequest):
 @app.post("/api/query")
 async def query_document(req: QueryRequest):
     try:
-        # Create or get conversation ID
         if not req.conversation_id or req.conversation_id not in conversation_history:
             conv_id = str(uuid.uuid4())
             conversation_history[conv_id] = []
         else:
             conv_id = req.conversation_id
             
-        # Make sure we have documents to query
         if not document_store:
             return {"error": "No documents have been embedded yet"}
             
-        # Encode the query
         query_embed = model.encode([req.query])
         
-        # Get the first document ID
         doc_id = next(iter(document_store))
-        
-        # Query the FAISS index
         index = document_store[doc_id]
-        k = 3  # Get top 3 most relevant chunks
+        k = 3  #  relevant chunks
         distances, indices = index.search(np.array(query_embed).astype('float32'), k)
         
-        # Get the text chunks for context
         chunks = chunks_store[doc_id]
         context = ""
         for idx in indices[0]:
             if idx < len(chunks):
                 context += chunks[idx] + "\n\n"
         
-        # Build conversation history
         history = ""
         for msg in conversation_history[conv_id]:
             if 'question' in msg and 'answer' in msg:
                 history += f"Q: {msg['question']}\nA: {msg['answer']}\n\n"
         
-        # Build the prompt
         prompt = f"""
-        Answer this question based on the provided context:
+        Answer this question based on context:
         
         CONTEXT:
         {context}
@@ -147,13 +136,11 @@ async def query_document(req: QueryRequest):
         
         QUESTION: {req.query}
         
-        If you cannot find the answer in the context, say you don't know.
+        If you can't find ans do not reply.
         """
         
-        # Generate response
         response_text = generate_response(prompt)
         
-        # Store conversation
         conversation_history[conv_id].append({"question": req.query, "answer": response_text})
         
         return {
