@@ -31,13 +31,13 @@ class EmbedRequest(BaseModel):
 
 class QueryRequest(BaseModel):
     query: str
+    document_id: str = None  
     conversation_id: str = None
 
 def process_document(file_path: str) -> str:
     text = ""
     if file_path.endswith('.pdf'):
         try:
-            
             with open(file_path, 'rb') as file:
                 reader = PyPDF2.PdfReader(file)
                 text = ""
@@ -45,7 +45,7 @@ def process_document(file_path: str) -> str:
                     text += page.extract_text() + " "
         except ImportError:
             # Fallback to report error
-            raise ImportError("PDF library not found. Please install PyPDF2: pip install PyPDF2")
+            raise ImportError("PDF is not there.")
             
     elif file_path.endswith('.docx'):
         try:
@@ -93,40 +93,54 @@ async def embed_document(req: EmbedRequest):
         
         return {"message": "Document embedded successfully", "document_id": doc_id}
     except Exception as e:
-        return {"error": f"Failed to embed document: {str(e)}"}
+        raise HTTPException(status_code=500, detail=f"Failed to embed document: {str(e)}")
 
 @app.post("/api/query")
 async def query_document(req: QueryRequest):
     try:
-        if not req.conversation_id or req.conversation_id not in conversation_history:
+        # conversation ID
+        if not req.conversation_id:
             conv_id = str(uuid.uuid4())
             conversation_history[conv_id] = []
         else:
             conv_id = req.conversation_id
+            if conv_id not in conversation_history:
+                conversation_history[conv_id] = []
             
         if not document_store:
-            return {"error": "No documents have been embedded yet"}
+            raise HTTPException(status_code=404, detail="No documents have been embedded yet")
+        
+        if req.document_id and req.document_id in document_store:
+            doc_id = req.document_id
+        elif len(document_store) > 0:
+            doc_id = next(iter(document_store))
+        else:
+            raise HTTPException(status_code=404, detail="No documents available")
             
+        # query embedding
         query_embed = model.encode([req.query])
         
-        doc_id = next(iter(document_store))
         index = document_store[doc_id]
-        k = 3  #  relevant chunks
+        k = 3
         distances, indices = index.search(np.array(query_embed).astype('float32'), k)
         
+        # relevant chunks
         chunks = chunks_store[doc_id]
         context = ""
         for idx in indices[0]:
             if idx < len(chunks):
                 context += chunks[idx] + "\n\n"
         
+        # conversation history
         history = ""
-        for msg in conversation_history[conv_id]:
-            if 'question' in msg and 'answer' in msg:
-                history += f"Q: {msg['question']}\nA: {msg['answer']}\n\n"
+        if conv_id in conversation_history:
+            for msg in conversation_history[conv_id]:
+                if 'question' in msg and 'answer' in msg:
+                    history += f"Q: {msg['question']}\nA: {msg['answer']}\n\n"
         
+        # Create prompt
         prompt = f"""
-        Answer this question based on context:
+        Answer this question based on the context:
         
         CONTEXT:
         {context}
@@ -136,19 +150,22 @@ async def query_document(req: QueryRequest):
         
         QUESTION: {req.query}
         
-        If you can't find ans do not reply.
+        If you can't find an answer in the context, say "I don't have enough information to answer this question."
         """
         
+        # Generate response
         response_text = generate_response(prompt)
         
+        # Update conversation history
         conversation_history[conv_id].append({"question": req.query, "answer": response_text})
         
         return {
             "response": response_text,
-            "conversation_id": conv_id
+            "conversation_id": conv_id,
+            "document_id": doc_id
         }
     except Exception as e:
-        return {"error": f"Error processing query: {str(e)}"}
+        raise HTTPException(status_code=500, detail=f"Error processing query: {str(e)}")
 
 def generate_response(query: str) -> str:
     try:
@@ -160,6 +177,7 @@ def generate_response(query: str) -> str:
         payload = {
             "model": "llama-3.3-70b-versatile",
             "messages": [
+                {"role": "system", "content": "You are a helpful assistant that answers questions based on the provided context."},
                 {"role": "user", "content": query}
             ]
         }
@@ -169,6 +187,11 @@ def generate_response(query: str) -> str:
         if response.status_code == 200:
             return response.json()['choices'][0]['message']['content']
         else:
-            return f"Error from Groq API: {response.text}"
+            error_message = f"Error from Groq API (Status {response.status_code}): {response.text}"
+            print(error_message) 
+            return "I encountered an error when generating a response. Please try again."
     except Exception as e:
-        return f"Error generating response: {str(e)}"
+        error_message = f"Error generating response: {str(e)}"
+        print(error_message) 
+        return "An unexpected error occurred while processing your request."
+
