@@ -73,6 +73,29 @@ async def status():
         "active_conversations": len(conversation_history)
     }
 
+# @app.post("/api/embedding")
+# async def embed_document(req: EmbedRequest):
+#     try:
+#         if not os.path.exists(req.document):
+#             raise HTTPException(status_code=400, detail="File not found")
+            
+#         text = process_document(req.document)
+#         chunks = [text[i:i + 512] for i in range(0, len(text), 512)]  # Simple chunking strategy
+            
+#         embeddings = model.encode(chunks)
+            
+#         index = faiss.IndexFlatL2(DIMENSION)
+#         index.add(np.array(embeddings).astype('float32'))
+            
+#         doc_id = str(uuid.uuid4())
+#         document_store[doc_id] = index
+#         chunks_store[doc_id] = chunks
+        
+#         return {"message": "Document embedded successfully", "document_id": doc_id}
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Failed to embed document: {str(e)}")
+
+
 @app.post("/api/embedding")
 async def embed_document(req: EmbedRequest):
     try:
@@ -84,7 +107,8 @@ async def embed_document(req: EmbedRequest):
             
         embeddings = model.encode(chunks)
             
-        index = faiss.IndexFlatL2(DIMENSION)
+        index = faiss.IndexHNSWFlat(DIMENSION, 32)
+        index.hnsw.efConstruction = 40
         index.add(np.array(embeddings).astype('float32'))
             
         doc_id = str(uuid.uuid4())
@@ -95,8 +119,10 @@ async def embed_document(req: EmbedRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to embed document: {str(e)}")
 
-@app.post("/api/query")
-async def query_document(req: QueryRequest):
+
+# @app.post("/api/query")
+# async def query_document(req: QueryRequest):
+    
     try:
         # conversation ID
         if not req.conversation_id:
@@ -166,6 +192,87 @@ async def query_document(req: QueryRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing query: {str(e)}")
+
+@app.post("/api/query")
+async def query_document(req: QueryRequest):
+    try:
+        # Handle conversation ID
+        if not req.conversation_id:
+            conv_id = str(uuid.uuid4())
+            conversation_history[conv_id] = []
+        else:
+            conv_id = req.conversation_id
+            if conv_id not in conversation_history:
+                conversation_history[conv_id] = []
+        
+        # Check if documents are embedded
+        if not document_store:
+            raise HTTPException(status_code=404, detail="No documents have been embedded yet")
+        
+        # Select document ID
+        if req.document_id and req.document_id in document_store:
+            doc_id = req.document_id
+        elif len(document_store) > 0:
+            doc_id = next(iter(document_store))
+        else:
+            raise HTTPException(status_code=404, detail="No documents available")
+        
+        # Generate embedding for the user query
+        query_embed = model.encode([req.query])
+        
+        index = document_store[doc_id]
+
+        # Optional: Set efSearch parameter for HNSW index
+        if isinstance(index, faiss.IndexHNSWFlat):
+            index.hnsw.efSearch = 64  # Higher = better accuracy, slower
+        
+        # Perform the search (top-k similar chunks)
+        k = 3
+        distances, indices = index.search(np.array(query_embed).astype('float32'), k)
+        
+        # Gather relevant chunks
+        chunks = chunks_store[doc_id]
+        context = ""
+        for idx in indices[0]:
+            if idx < len(chunks):
+                context += chunks[idx] + "\n\n"
+        
+        # Build conversation history string
+        history = ""
+        if conv_id in conversation_history:
+            for msg in conversation_history[conv_id]:
+                if 'question' in msg and 'answer' in msg:
+                    history += f"Q: {msg['question']}\nA: {msg['answer']}\n\n"
+        
+        # Prepare prompt for Groq API
+        prompt = f"""
+        Answer this question based on the context:
+
+        CONTEXT:
+        {context}
+
+        CONVERSATION HISTORY:
+        {history}
+
+        QUESTION: {req.query}
+
+        If you can't find an answer in the context, say "I don't have enough information to answer this question."
+        """
+        
+        # Generate response using Groq
+        response_text = generate_response(prompt)
+        
+        # Save this interaction to history
+        conversation_history[conv_id].append({"question": req.query, "answer": response_text})
+        
+        return {
+            "response": response_text,
+            "conversation_id": conv_id,
+            "document_id": doc_id
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing query: {str(e)}")
+
 
 def generate_response(query: str) -> str:
     try:
