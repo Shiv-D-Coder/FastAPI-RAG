@@ -3,17 +3,24 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import os
 import uuid
+
 import faiss
 import numpy as np
+
 from sentence_transformers import SentenceTransformer, CrossEncoder
 import nltk
 from nltk.tokenize import sent_tokenize
 from dotenv import load_dotenv
 import requests
 import json
+
 import PyPDF2
 import re
 from typing import List, Dict, Any, Optional
+
+print("This is end of code ")
+
+print("This is nltk library that might not be use in code")
 
 # Download NLTK data for sentence tokenization - fixed punkt download
 try:
@@ -55,6 +62,7 @@ class QueryRequest(BaseModel):
 
 class ConversationRequest(BaseModel):
     conversation_id: str
+
 
 def semantic_chunking(text: str, min_chunk_size: int = 200, max_chunk_size: int = 1000) -> List[str]:
     """
@@ -312,7 +320,8 @@ async def query_document(req: QueryRequest):
         if req.rerank and len(candidates) > 0:
             pairs = [(req.query, candidate["chunk"]) for candidate in candidates]
             rerank_scores = reranker_model.predict(pairs)
-            
+            print("This is for testing this has no use at all for now ")
+
             # Sort candidates by reranker score
             for i, score in enumerate(rerank_scores):
                 candidates[i]["rerank_score"] = float(score)
@@ -324,7 +333,8 @@ async def query_document(req: QueryRequest):
         context = ""
         for candidate in candidates[:req.top_k]:
             context += candidate["chunk"] + "\n\n"
-        
+        print("This is for testing this has no use at all for now ")
+
         # Get conversation summary for memory
         conversation_summary = summarize_conversation(conv_id) if len(conversation_history[conv_id]) > 0 else ""
         
@@ -352,7 +362,8 @@ async def query_document(req: QueryRequest):
 
         If you can't find an answer in the context, say "I don't have enough information to answer this question."
         """
-        
+        print("This is for testing this has no use at all for now ")
+
         # Generate response using Groq
         response_text = generate_response(prompt)
         
@@ -373,6 +384,7 @@ async def query_document(req: QueryRequest):
     except Exception as e:
         print(f"Error in query_document: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing query: {str(e)}")
+print("This is for testing this has no use at all for now ")
 
 @app.get("/api/conversation/{conversation_id}/summary")
 async def get_conversation_summary(conversation_id: str):
@@ -386,6 +398,7 @@ async def get_conversation_summary(conversation_id: str):
         "interactions_count": len(conversation_history[conversation_id]),
         "summary": summary
     }
+print("This is for testing this has no use at all for now ")
 
 @app.post("/api/conversation/clear")
 async def clear_conversation(req: ConversationRequest):
@@ -413,7 +426,8 @@ def generate_response(query: str) -> str:
             ],
             "temperature": 0.3  # Lower temperature for more focused answers
         }
-            
+        print("This is for testing this has no use at all for now ")
+    
         response = requests.post(url, json=payload, headers=headers)
             
         if response.status_code == 200:
@@ -438,7 +452,7 @@ async def health_check():
         },
         "api_version": "1.1.0"
     }
-
+print("This is for testing this has no use at all for now ")
 
 try:
     nltk.download('punkt')
@@ -446,3 +460,4 @@ try:
 except Exception as e:
     print(f"Warning: Failed to download NLTK punkt dataset: {e}")
     
+
