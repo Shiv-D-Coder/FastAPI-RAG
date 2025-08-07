@@ -3,20 +3,24 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import os
 import uuid
+
 import faiss
 import numpy as np
+
 from sentence_transformers import SentenceTransformer, CrossEncoder
 import nltk
 from nltk.tokenize import sent_tokenize
 from dotenv import load_dotenv
 import requests
 import json
+
 import PyPDF2
 import re
 from typing import List, Dict, Any, Optional
 
 print("This is end of code ")
 
+print("This is nltk library that might not be use in code")
 
 # Download NLTK data for sentence tokenization - fixed punkt download
 try:
@@ -58,6 +62,7 @@ class QueryRequest(BaseModel):
 
 class ConversationRequest(BaseModel):
     conversation_id: str
+
 
 def semantic_chunking(text: str, min_chunk_size: int = 200, max_chunk_size: int = 1000) -> List[str]:
     """
@@ -455,3 +460,4 @@ try:
 except Exception as e:
     print(f"Warning: Failed to download NLTK punkt dataset: {e}")
     
+
